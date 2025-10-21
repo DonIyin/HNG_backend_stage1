@@ -51,7 +51,7 @@ class AnalyzedString(db.Model):
         }
 
 
-# ==================== UTILITY FUNCTIONS ====================
+# UTILITY FUNCTIONS
 def compute_sha256(text):
     """Generate SHA-256 hash of a string"""
     return hashlib.sha256(text.encode()).hexdigest()
@@ -95,7 +95,6 @@ def analyze_string(value):
 
 
 
-# Add this NEW function after analyze_string() and before routes
 def parse_natural_language_query(query):
     """
     Parse natural language query into filters
@@ -417,11 +416,10 @@ def delete_string(string_value):
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
 
-# ==================== INITIALIZATION ====================
+# INITIALIZATION
 with app.app_context():
     db.create_all()
 
-# ==================== RUN APP ====================
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=True)
