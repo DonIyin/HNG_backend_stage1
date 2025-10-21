@@ -21,7 +21,7 @@ db = SQLAlchemy(app)
 CORS(app)
 
 
-# ==================== DATABASE MODEL ====================
+# DATABASE MODEL
 class AnalyzedString(db.Model):
     __tablename__ = 'analyzed_strings'
 
