@@ -85,7 +85,7 @@ PORT=5000
 python backend_stage1.py
 ```
 
-Your API is now live at: **http://localhost:5000**
+Your API is now live at: https://web-production-219551.up.railway.app/strings
 
 ---
 
