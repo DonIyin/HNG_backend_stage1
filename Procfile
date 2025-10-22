@@ -1,0 +1,1 @@
+web: gunicorn backend_stage1:app --bind 0.0.0.0:$PORT
