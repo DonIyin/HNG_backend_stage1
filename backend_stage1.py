@@ -20,7 +20,6 @@ app.config['JSON_SORT_KEYS'] = False
 db = SQLAlchemy(app)
 CORS(app)
 
-
 # DATABASE MODEL
 class AnalyzedString(db.Model):
     __tablename__ = 'analyzed_strings'
@@ -50,28 +49,23 @@ class AnalyzedString(db.Model):
             'created_at': self.created_at.isoformat() + 'Z'
         }
 
-
 # UTILITY FUNCTIONS
 def compute_sha256(text):
     """Generate SHA-256 hash of a string"""
     return hashlib.sha256(text.encode()).hexdigest()
-
 
 def is_palindrome(text):
     """Check if string is palindrome (case-insensitive)"""
     cleaned = text.lower().replace(' ', '')
     return cleaned == cleaned[::-1]
 
-
 def count_unique_characters(text):
     """Count distinct characters"""
     return len(set(text))
 
-
 def count_words(text):
     """Count words separated by whitespace"""
     return len(text.split())
-
 
 def get_character_frequency(text):
     """Generate character frequency map"""
@@ -79,7 +73,6 @@ def get_character_frequency(text):
     for char in text:
         freq[char] = freq.get(char, 0) + 1
     return freq
-
 
 def analyze_string(value):
     """Analyze string and return all properties"""
@@ -91,9 +84,6 @@ def analyze_string(value):
         'sha256_hash': compute_sha256(value),
         'character_frequency_map': get_character_frequency(value)
     }
-
-
-
 
 def parse_natural_language_query(query):
     """
@@ -179,6 +169,16 @@ def parse_natural_language_query(query):
         filters['min_length'] = length
         filters['max_length'] = length
 
+    # New Pattern: Contains specific word
+    word_match = re.search(r'contains word (\w+)', query_lower)
+    if word_match:
+        filters['contains_word'] = word_match.group(1)
+
+    # New Pattern: Starts with character
+    starts_with_match = re.search(r'starts with ([a-z])', query_lower)
+    if starts_with_match:
+        filters['starts_with'] = starts_with_match.group(1)
+
     # If no filters were extracted, the query is unparseable
     if not filters:
         raise ValueError("Unable to parse natural language query")
@@ -191,83 +191,51 @@ def parse_natural_language_query(query):
 def create_string():
     """POST /strings - Create/Analyze String"""
     try:
-        # Get JSON data from request
         data = request.get_json()
-
-        # Validate request body exists
         if not data:
             return jsonify({'error': 'Invalid request body'}), 400
 
-        # Validate 'value' field exists
         if 'value' not in data:
             return jsonify({'error': 'Missing "value" field'}), 400
 
         value = data['value']
-
-        # Validate 'value' is a string
         if not isinstance(value, str):
             return jsonify({'error': 'Invalid data type for "value" (must be string)'}), 422
 
-        # Check if string already exists
         sha256_hash = compute_sha256(value)
+        assert len(sha256_hash) == 64, "SHA-256 hash length mismatch"
         existing = AnalyzedString.query.filter_by(sha256_hash=sha256_hash).first()
 
         if existing:
             return jsonify({'error': 'String already exists in the system'}), 409
 
-        # Analyze the string
         properties = analyze_string(value)
-
-        # Create new database entry
         new_string = AnalyzedString(
-            id=properties['sha256_hash'],
+            id=sha256_hash,
             value=value,
             length=properties['length'],
             is_palindrome=properties['is_palindrome'],
             unique_characters=properties['unique_characters'],
             word_count=properties['word_count'],
-            sha256_hash=properties['sha256_hash'],
+            sha256_hash=sha256_hash,
             character_frequency_map=properties['character_frequency_map']
         )
 
-        # Save to database
         db.session.add(new_string)
         db.session.commit()
-
-        # Return response
         return jsonify(new_string.to_dict()), 201
 
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
 
-
-@app.route('/strings/<path:string_value>', methods=['GET'])
-def get_string(string_value):
-    """GET /strings/{string_value} - Get Specific String"""
-    try:
-        # Find string in database by value
-        analyzed_string = AnalyzedString.query.filter_by(value=string_value).first()
-
-        if not analyzed_string:
-            return jsonify({'error': 'String does not exist in the system'}), 404
-
-        return jsonify(analyzed_string.to_dict()), 200
-
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
 @app.route('/strings', methods=['GET'])
 def get_all_strings():
     """GET /strings - Get All Strings with Filtering"""
     try:
-        # Start with base query
         query = AnalyzedString.query
-
-        # Collect applied filters
         filters_applied = {}
 
-        # Filter by is_palindrome
         is_palindrome_param = request.args.get('is_palindrome')
         if is_palindrome_param is not None:
             if is_palindrome_param.lower() == 'true':
@@ -279,7 +247,6 @@ def get_all_strings():
             else:
                 return jsonify({'error': 'Invalid value for is_palindrome (must be true or false)'}), 400
 
-        # Filter by min_length
         min_length = request.args.get('min_length')
         if min_length is not None:
             try:
@@ -289,7 +256,6 @@ def get_all_strings():
             except ValueError:
                 return jsonify({'error': 'Invalid value for min_length (must be integer)'}), 400
 
-        # Filter by max_length
         max_length = request.args.get('max_length')
         if max_length is not None:
             try:
@@ -299,7 +265,6 @@ def get_all_strings():
             except ValueError:
                 return jsonify({'error': 'Invalid value for max_length (must be integer)'}), 400
 
-        # Filter by word_count
         word_count = request.args.get('word_count')
         if word_count is not None:
             try:
@@ -309,48 +274,40 @@ def get_all_strings():
             except ValueError:
                 return jsonify({'error': 'Invalid value for word_count (must be integer)'}), 400
 
-        # Filter by contains_character
         contains_character = request.args.get('contains_character')
         if contains_character is not None:
             if len(contains_character) != 1:
                 return jsonify({'error': 'contains_character must be a single character'}), 400
-            # Filter strings that contain the character
             query = query.filter(AnalyzedString.value.contains(contains_character))
             filters_applied['contains_character'] = contains_character
 
-        # Execute query
         results = query.all()
+        if not results:
+            return jsonify({'error': 'No strings found'}), 404
 
-        # Format response
         response = {
             'data': [string.to_dict() for string in results],
             'count': len(results),
             'filters_applied': filters_applied
         }
-
         return jsonify(response), 200
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-
 @app.route('/strings/filter-by-natural-language', methods=['GET'])
 def natural_language_filter():
     """GET /strings/filter-by-natural-language - Natural Language Filtering"""
     try:
-        # Get the query parameter
         query = request.args.get('query')
-
         if not query:
             return jsonify({'error': 'Missing "query" parameter'}), 400
 
-        # Parse the natural language query
         try:
             parsed_filters = parse_natural_language_query(query)
         except ValueError as e:
             return jsonify({'error': str(e)}), 400
 
-        # Check for conflicting filters
         if 'min_length' in parsed_filters and 'max_length' in parsed_filters:
             if parsed_filters['min_length'] > parsed_filters['max_length']:
                 return jsonify({
@@ -358,10 +315,8 @@ def natural_language_filter():
                     'details': f"min_length ({parsed_filters['min_length']}) > max_length ({parsed_filters['max_length']})"
                 }), 422
 
-        # Start with base query
         db_query = AnalyzedString.query
 
-        # Apply filters
         if 'is_palindrome' in parsed_filters:
             db_query = db_query.filter_by(is_palindrome=parsed_filters['is_palindrome'])
 
@@ -377,10 +332,14 @@ def natural_language_filter():
         if 'contains_character' in parsed_filters:
             db_query = db_query.filter(AnalyzedString.value.contains(parsed_filters['contains_character']))
 
-        # Execute query
+        if 'contains_word' in parsed_filters:
+            db_query = db_query.filter(AnalyzedString.value.contains(' ' + parsed_filters['contains_word'] + ' '))
+
+        if 'starts_with' in parsed_filters:
+            db_query = db_query.filter(AnalyzedString.value.startswith(parsed_filters['starts_with']))
+
         results = db_query.all()
 
-        # Format response
         response = {
             'data': [string.to_dict() for string in results],
             'count': len(results),
@@ -389,37 +348,37 @@ def natural_language_filter():
                 'parsed_filters': parsed_filters
             }
         }
-
         return jsonify(response), 200
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/strings/<path:string_value>', methods=['GET'])
+def get_string(string_value):
+    """GET /strings/{string_value} - Get Specific String"""
+    try:
+        analyzed_string = AnalyzedString.query.filter_by(value=string_value).first()
+        if not analyzed_string:
+            return jsonify({'error': 'String does not exist in the system'}), 404
+        return jsonify(analyzed_string.to_dict()), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/strings/<path:string_value>', methods=['DELETE'])
 def delete_string(string_value):
     """DELETE /strings/{string_value}"""
     try:
-        # Find string in database
         analyzed_string = AnalyzedString.query.filter_by(value=string_value).first()
-
         if not analyzed_string:
             return jsonify({'error': 'String does not exist in the system'}), 404
-
-        # Delete from database
         db.session.delete(analyzed_string)
         db.session.commit()
-
         return '', 204
-
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
 
-# INITIALIZATION
-with app.app_context():
-    db.create_all()
-
 if __name__ == '__main__':
-    port = int(os.getenv('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=True)
+    with app.app_context():
+        db.create_all()
+    app.run(debug=True)
